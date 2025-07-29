@@ -1,0 +1,34 @@
+name: Build and Deploy
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每日UTC时间0点执行（北京时间8点）
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: pip install requests
+      
+      - name: Run script to generate HTML
+        env:
+          APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          APP_TOKEN: ${{ secrets.FEISHU_APP_TOKEN }}
+          TABLE_ID: ${{ secrets.FEISHU_TABLE_ID }}
+        run: |
+          python generate_site.py
+      
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: .
