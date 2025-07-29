@@ -1,6 +1,6 @@
 {
   "dependencies": {
     "axios": "^1.6.2",
-    "cheerio": "^1.0.0-rc.12"  // 用于处理HTML模板
+    "cheerio": "^1.0.0-rc.12"
   }
 }
