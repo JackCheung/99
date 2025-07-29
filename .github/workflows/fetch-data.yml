@@ -1,0 +1,59 @@
+name: 同步飞书数据并生成网页
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # 每6小时同步一次
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装Node环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 获取飞书数据
+        env:
+          APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          APP_TOKEN: ${{ secrets.FEISHU_APP_TOKEN }}
+          TABLE_ID: ${{ secrets.FEISHU_TABLE_ID }}
+        run: |
+          node -e "
+          const axios = require('axios');
+          async function getToken() {
+            const res = await axios.post('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+              app_id: process.env.APP_ID,
+              app_secret: process.env.APP_SECRET
+            });
+            return res.data.tenant_access_token;
+          }
+          async function fetchData(token) {
+            const res = await axios.post(
+              \`https://open.feishu.cn/open-apis/bitable/v1/apps/\${process.env.APP_TOKEN}/tables/\${process.env.TABLE_ID}/records/search\`,
+              { page_size: 100 },
+              { headers: { Authorization: \`Bearer \${token}\` } }
+            );
+            require('fs').writeFileSync('data.json', JSON.stringify(res.data));
+          }
+          getToken().then(token => fetchData(token));
+          "
+
+      - name: 生成网页
+        run: node scripts/generate-pages.js
+
+      - name: 提交更新
+        run: |
+          git config --global user.name "自动部署机器人"
+          git config --global user.email "bot@example.com"
+          git add .
+          git commit -m "自动更新: $(date +'%Y-%m-%d %H:%M')" || exit 0
+          git push
