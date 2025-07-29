@@ -1,43 +1,50 @@
 const fs = require('fs');
 const path = require('path');
 
-try {
-  // 1. 读取数据
-  const rawData = fs.readFileSync(path.join(__dirname, 'data.json'), 'utf8');
-  const jsonData = JSON.parse(rawData);
-  
-  // 2. 调试输出数据结构
-  console.log('顶层键:', Object.keys(jsonData));
-  if (jsonData.data) console.log('data键:', Object.keys(jsonData.data));
-  
-  // 3. 多种格式兼容
-  let records = [];
-  if (Array.isArray(jsonData)) {
-    records = jsonData;
-  } else if (jsonData.records) {
-    records = jsonData.records;
-  } else if (jsonData.data?.items) {
-    records = jsonData.data.items;
-  } else if (jsonData.value) { // 某些API格式
-    records = jsonData.value;
-  } else {
-    throw new Error('无法识别的数据结构，请提供 data.json 的开头部分');
-  }
+// 获取项目根目录（脚本所在目录的上级目录）
+const rootDir = path.resolve(__dirname, '..');
 
-  console.log(`找到 ${records.length} 条记录`);
-  
-  // 4. 处理文章数据（添加默认值防止报错）
-  const posts = records.map((record, i) => ({
-    id: record.id || record.fields?.文章ID || `post-${i}`,
-    title: record.title || record.fields?.标题 || '无标题',
-    content: record.content || record.fields?.内容 || '',
-    date: record.date || record.fields?.发布日期 || new Date().toISOString().split('T')[0],
-    summary: record.summary || record.fields?.摘要 || ''
-  }));
+// 读取飞书数据
+const rawData = fs.readFileSync(path.join(rootDir, 'data.json'), 'utf8');
+const jsonData = JSON.parse(rawData);
 
-  // ... 其余的页面生成代码 ...
-
-} catch (error) {
-  console.error('处理失败:', error);
-  process.exit(1);
+// 添加数据结构验证
+if (!jsonData.data || !Array.isArray(jsonData.data.records)) {
+  throw new Error('Invalid JSON structure: Missing data.records array');
 }
+
+const posts = jsonData.data.records.map(record => ({
+  id: record.fields['文章ID'],
+  title: record.fields['标题'],
+  content: record.fields['内容'],
+  date: record.fields['发布日期'],
+  summary: record.fields['摘要']
+}));
+
+// 生成列表页
+const listTemplate = fs.readFileSync(path.join(rootDir, '_templates/index.template.html'), 'utf8');
+const postListHtml = posts.map(post => `
+  <div class="post-item">
+    <h2><a href="/posts/${post.id}.html" class="post-title">${post.title}</a></h2>
+    <p class="post-meta">${post.date}</p>
+    <p>${post.summary}</p>
+  </div>
+`).join('');
+
+const indexHtml = listTemplate.replace('<!-- POST_LIST -->', postListHtml);
+fs.writeFileSync(path.join(rootDir, 'index.html'), indexHtml);
+
+// 生成详情页
+const postTemplate = fs.readFileSync(path.join(rootDir, '_templates/post.template.html'), 'utf8');
+const postsDir = path.join(rootDir, 'posts');
+if (!fs.existsSync(postsDir)) fs.mkdirSync(postsDir);
+
+posts.forEach(post => {
+  let content = post.content.replace(/<img/g, '<img style="max-width:100%;"');
+  const postHtml = postTemplate
+    .replace('{{title}}', post.title)
+    .replace('{{date}}', post.date)
+    .replace('{{content}}', content);
+    
+  fs.writeFileSync(path.join(postsDir, `${post.id}.html`), postHtml);
+});
