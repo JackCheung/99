@@ -1,61 +1,43 @@
 const fs = require('fs');
 const path = require('path');
 
-// 读取数据文件
-const rawData = fs.readFileSync('data.json', 'utf8');
-console.log('--- 数据文件前200字符 ---');
-console.log(rawData.substring(0, 200));
-console.log('------------------------');
-
-// 解析JSON
-const jsonData = JSON.parse(rawData);
-console.log('--- JSON顶层结构 ---');
-console.log('顶层字段:', Object.keys(jsonData));
-console.log('--------------------');
-
-// 如果顶层有数据字段，进一步检查
-if (jsonData.data) {
-  console.log('--- data字段结构 ---');
-  console.log('data字段类型:', typeof jsonData.data);
-  if (jsonData.data && typeof jsonData.data === 'object') {
-    console.log('data字段的键:', Object.keys(jsonData.data));
+try {
+  // 1. 读取数据
+  const rawData = fs.readFileSync(path.join(__dirname, 'data.json'), 'utf8');
+  const jsonData = JSON.parse(rawData);
+  
+  // 2. 调试输出数据结构
+  console.log('顶层键:', Object.keys(jsonData));
+  if (jsonData.data) console.log('data键:', Object.keys(jsonData.data));
+  
+  // 3. 多种格式兼容
+  let records = [];
+  if (Array.isArray(jsonData)) {
+    records = jsonData;
+  } else if (jsonData.records) {
+    records = jsonData.records;
+  } else if (jsonData.data?.items) {
+    records = jsonData.data.items;
+  } else if (jsonData.value) { // 某些API格式
+    records = jsonData.value;
+  } else {
+    throw new Error('无法识别的数据结构，请提供 data.json 的开头部分');
   }
-  console.log('-------------------');
-}
 
-// 如果可能包含记录，尝试查找数组
-let foundRecords = null;
+  console.log(`找到 ${records.length} 条记录`);
+  
+  // 4. 处理文章数据（添加默认值防止报错）
+  const posts = records.map((record, i) => ({
+    id: record.id || record.fields?.文章ID || `post-${i}`,
+    title: record.title || record.fields?.标题 || '无标题',
+    content: record.content || record.fields?.内容 || '',
+    date: record.date || record.fields?.发布日期 || new Date().toISOString().split('T')[0],
+    summary: record.summary || record.fields?.摘要 || ''
+  }));
 
-if (Array.isArray(jsonData)) {
-  foundRecords = jsonData;
-} else if (jsonData.data && Array.isArray(jsonData.data)) {
-  foundRecords = jsonData.data;
-} else if (jsonData.records && Array.isArray(jsonData.records)) {
-  foundRecords = jsonData.records;
-} else if (jsonData.data?.records && Array.isArray(jsonData.data.records)) {
-  foundRecords = jsonData.data.records;
-} else {
-  // 尝试深度搜索数组
-  const deepSearch = (obj) => {
-    for (const key in obj) {
-      if (Array.isArray(obj[key])) {
-        return obj[key];
-      }
-      if (typeof obj[key] === 'object') {
-        const result = deepSearch(obj[key]);
-        if (result) return result;
-      }
-    }
-    return null;
-  };
-  foundRecords = deepSearch(jsonData);
-}
+  // ... 其余的页面生成代码 ...
 
-if (!foundRecords) {
-  console.error('无法找到记录数组，请检查data.json结构');
-  console.log('完整JSON结构:', JSON.stringify(jsonData, null, 2).substring(0, 500));
+} catch (error) {
+  console.error('处理失败:', error);
   process.exit(1);
 }
-
-console.log(`找到 ${foundRecords.length} 条记录`);
-process.exit(0); // 仅用于调试，查看结构后移除
