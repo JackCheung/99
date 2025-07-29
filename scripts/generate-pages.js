@@ -1,25 +1,52 @@
 const fs = require('fs');
 const path = require('path');
 
-// 获取项目根目录（脚本所在目录的上级目录）
-const rootDir = path.resolve(__dirname, '..');
-
-// 读取飞书数据
-const rawData = fs.readFileSync(path.join(rootDir, 'data.json'), 'utf8');
+// 1. 获取数据文件
+const dataPath = path.join(__dirname, '..', 'data.json');
+const rawData = fs.readFileSync(dataPath, 'utf8');
 const jsonData = JSON.parse(rawData);
 
-// 添加数据结构验证
-if (!jsonData.data || !Array.isArray(jsonData.data.records)) {
-  throw new Error('Invalid JSON structure: Missing data.records array');
+// 2. 调试输出
+console.log('JSON顶层字段:', Object.keys(jsonData));
+if (jsonData.data) console.log('data字段:', Object.keys(jsonData.data));
+
+// 3. 获取记录数组
+let records = [];
+if (Array.isArray(jsonData)) {
+  records = jsonData;
+} else if (jsonData.records) {
+  records = jsonData.records;
+} else if (jsonData.data?.items) {
+  records = jsonData.data.items;
+} else {
+  // 深度搜索
+  const findArray = (obj) => {
+    if (Array.isArray(obj)) return obj;
+    for (const key in obj) {
+      if (Array.isArray(obj[key])) return obj[key];
+      if (typeof obj[key] === 'object') {
+        const found = findArray(obj[key]);
+        if (found) return found;
+      }
+    }
+  };
+  records = findArray(jsonData) || [];
 }
 
-const posts = jsonData.data.records.map(record => ({
-  id: record.fields['文章ID'],
-  title: record.fields['标题'],
-  content: record.fields['内容'],
-  date: record.fields['发布日期'],
-  summary: record.fields['摘要']
+if (records.length === 0) {
+  throw new Error('未找到文章数据，请检查data.json格式');
+}
+
+// 4. 处理文章数据
+const posts = records.map((record, i) => ({
+  id: record.fields?.['文章ID'] || record.id || `post-${i}`,
+  title: record.fields?.['标题'] || record.title || '无标题',
+  content: record.fields?.['内容'] || record.content || '',
+  date: record.fields?.['发布日期'] || record.date || new Date().toISOString().split('T')[0],
+  summary: record.fields?.['摘要'] || record.summary || ''
 }));
+
+// 5. 后续页面生成代码...
 
 // 生成列表页
 const listTemplate = fs.readFileSync(path.join(rootDir, '_templates/index.template.html'), 'utf8');
